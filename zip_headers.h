@@ -1,18 +1,18 @@
 #ifndef ZIP_HEADERS_H_
 #define ZIP_HEADERS_H_
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct {
-	uint16_t disk_num;
-	uint16_t cdir_start_disk;
-	uint16_t disk_cdir_entries;
-	uint16_t cdir_entries_num;
-	uint32_t cd_size;
-	uint32_t cd_offset;
-	uint16_t comment_len;
-	const uint8_t *comment;
+    uint16_t       disk_num;
+    uint16_t       cdir_start_disk;
+    uint16_t       disk_cdir_entries;
+    uint16_t       cdir_entries_num;
+    uint32_t       cd_size;
+    uint32_t       cd_offset;
+    uint16_t       comment_len;
+    const uint8_t* comment;
 } eocdr_t;
 
 #define EOCDR_BASE_SIZE 22
