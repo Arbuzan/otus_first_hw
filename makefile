@@ -2,17 +2,19 @@ COMPILE_FLAGS := -Wall -Wextra -Wpedantic -std=c11
 
 clean:
 	rm *.o
-	rm build_*
+	rm -rf bin
 
-build_dbg: COMPILE_FLAGS += -O0 -g3
-build_dbg: $(patsubst %.c, %.o, $(wildcard *.c))	
-	gcc $(COMPILE_FLAGS) $^ -o $@
+debug: COMPILE_FLAGS += -O0 -g3
+debug: $(patsubst %.c, %.o, $(wildcard *.c))
+	mkdir -p bin
+	gcc $(COMPILE_FLAGS) $^ -o bin/$@
 
-build_rls: COMPILE_FLAGS += -Os -g0
-build_rls: $(patsubst %.c, %.o, $(wildcard *.c))
-	gcc $(COMPILE_FLAGS) $^ -o $@
+release: COMPILE_FLAGS += -Os -g0
+release: $(patsubst %.c, %.o, $(wildcard *.c))
+	mkdir -p bin
+	gcc $(COMPILE_FLAGS) $^ -o bin/$@
 
-%.o: %.c
+%.o: %.c	
 	gcc $(COMPILE_FLAGS) -c $<
     
 main.o: zip_headers.h
