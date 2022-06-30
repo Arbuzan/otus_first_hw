@@ -3,21 +3,44 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
-typedef struct {
-    uint16_t       disk_num;
-    uint16_t       cdir_start_disk;
-    uint16_t       disk_cdir_entries;
-    uint16_t       cdir_entries_num;
-    uint32_t       cd_size;
-    uint32_t       cd_offset;
-    uint16_t       comment_len;
-    const uint8_t* comment;
-} eocdr_t;
+#define BUFFER_SIZE 1024U
+#define JPEG_START_SIGN 0xFFD8U
+#define JPEG_END_SIGN 0xFFD9U
 
-#define EOCDR_BASE_SIZE 22
-#define EOCDR_SIGNATURE 0x06054b50
+// Обязательная сигнатура, равна 0x04034b50
+#define LOCF_SIGNATURE 0x04034b50U
 
-int check_for_eocdr(const uint8_t* input, eocdr_t* out, size_t size);
+typedef struct
+{
+    // Минимальная версия для распаковки
+    uint16_t version_to_extract;
+    // Битовый флаг
+    uint16_t general_purpose_bit_flag;
+    // Метод сжатия (0 - без сжатия, 8 - deflate)
+    uint16_t compression_method;
+    // Время модификации файла
+    uint16_t modification_time;
+    // Дата модификации файла
+    uint16_t modification_date;
+    // Контрольная сумма
+    uint32_t crc32;
+    // Сжатый размер
+    uint32_t compressed_size;
+    // Несжатый размер
+    uint32_t uncompressed_size;
+    // Длина название файла
+    uint16_t filename_length;
+    // Длина поля с дополнительными данными
+    uint16_t extra_field_length;
+    // Название файла (размером filenameLength)
+    const uint8_t *filename;
+    // Дополнительные данные (размером extraFieldLength)
+    const uint8_t *extra_field;
+} local_file_header_t;
+
+int check_for_cdir(uint8_t* input, size_t buf_start_pos, FILE* f_ptr, size_t size);
+size_t find_jpeg_end(uint8_t* input, FILE* f_ptr, size_t* f_size);
 
 #endif /* ZIP_HEADERS_H_ */
