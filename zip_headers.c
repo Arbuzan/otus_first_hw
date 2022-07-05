@@ -1,87 +1,157 @@
 #include "zip_headers.h"
 
-static const uint8_t* readw_16b(const uint8_t* p_in, uint16_t* p_out) {
-    *p_out = *(uint16_t*)(p_in);
-    return p_in + sizeof(uint16_t);
-}
+static int readw_16b_lsb(FILE* f_ptr, uint16_t* halfword) {
+    int byte[sizeof(uint16_t)];
 
-static const uint8_t* readw_32b(const uint8_t* p_in, uint32_t* p_out) {
-    *p_out = *(uint32_t*)(p_in);
-    return p_in + sizeof(uint32_t);
-}
-
-static void print_field(const uint8_t* f_name, const uint16_t length) {
-	for(uint16_t i = 0; i < length; i++) {
-		printf("%c", f_name[i]);
-	}
-	printf("\n");
-}
-
-size_t find_jpeg_end(uint8_t* buf, FILE* f_ptr, size_t* f_size) {
-	size_t read_size = 0, jpeg_end = 0;
-	uint16_t signature = 0;
-
-    while(f_size) {
-		read_size = fread(buf, sizeof(uint8_t), BUFFER_SIZE, f_ptr);
-		for(size_t pos = 1; pos < read_size; pos++) {
-			signature = (buf[pos-1] << 8) | (buf[pos]);
-			if(signature == JPEG_START_SIGN) {
-				continue;
-			}
-			if(signature == JPEG_END_SIGN) {
-				jpeg_end = pos * sizeof(uint8_t);
-				break;
-			}
-		}
-		if(signature == JPEG_END_SIGN) {
-			*f_size -= jpeg_end;
-			return jpeg_end + 1;
-		}
-		*f_size -= read_size;
+    for (size_t i = 0; i < sizeof(uint16_t); i++) {
+        byte[i] = fgetc(f_ptr);
+        if (byte[i] == EOF) {
+            return EOF;
+        }
     }
-    return 0;
+    *halfword = (((uint16_t)byte[1]) << 8) | (uint16_t)(byte[0]);
+    return sizeof(uint16_t);
 }
 
-int check_for_cdir(uint8_t* buf, size_t buf_start_pos, FILE* f_ptr, size_t f_size) {
-	int fail = 1;
-	size_t read_size = BUFFER_SIZE;
-	uint32_t signature = 0;
-	local_file_header_t locf_header;
-	const uint8_t* p = buf + buf_start_pos;
+static int readw_16b_msb(FILE* f_ptr, uint16_t* halfword) {
+    int byte[sizeof(uint16_t)];
 
-	while(f_size) {
-		for(size_t pos = buf_start_pos; pos < read_size; pos++) {
-			p = readw_32b(p, &signature);
-			if(signature == LOCF_SIGNATURE) {
-				p = readw_16b(p, &locf_header.version_to_extract);
-				p = readw_16b(p, &locf_header.general_purpose_bit_flag);
-				p = readw_16b(p, &locf_header.compression_method);
-				p = readw_16b(p, &locf_header.modification_time);
-				p = readw_16b(p, &locf_header.modification_date);
-				p = readw_32b(p, &locf_header.crc32);
-				p = readw_32b(p, &locf_header.compressed_size);
-				p = readw_32b(p, &locf_header.uncompressed_size);
-				p = readw_16b(p, &locf_header.filename_length);
-				p = readw_16b(p, &locf_header.extra_field_length);
-				locf_header.filename = p++;
-				locf_header.extra_field = p++;
-				print_field(locf_header.filename, locf_header.filename_length);
-				fail = 0;
-			}
-		}
-		f_size -= read_size - buf_start_pos;
-		p = buf;
-		read_size = fread(buf, sizeof(uint8_t), BUFFER_SIZE, f_ptr);
-		if(!read_size && !fail) {
-			printf("ZIP archive found. File list above ^\n");
-			break;
-		} else if(!read_size) {
-			printf("No ZIP archive found\n");
-			break;
-		}
-		if(buf_start_pos) {
-			buf_start_pos = 0;
-		}
-	}
-	return fail;
+    for (size_t i = 0; i < sizeof(uint16_t); i++) {
+        byte[i] = fgetc(f_ptr);
+        if (byte[i] == EOF) {
+            return EOF;
+        }
+    }
+    *halfword = (((uint16_t)byte[0]) << 8) | (uint16_t)(byte[1]);
+    return sizeof(uint16_t);
+}
+
+static int readw_32b_lsb(FILE* f_ptr, uint32_t* word) {
+    int byte[sizeof(uint32_t)];
+
+    for (size_t i = 0; i < sizeof(uint32_t); i++) {
+        byte[i] = fgetc(f_ptr);
+        if (byte[i] == EOF) {
+            return EOF;
+        }
+    }
+    *word = (((uint32_t)byte[0]) << 24) | (((uint32_t)byte[1]) << 16) |
+            (((uint32_t)byte[2]) << 8) | (uint32_t)byte[3];
+    return sizeof(uint32_t);
+}
+
+static int check_locf_signature(FILE* f_ptr, int* offset) {
+    int byte[sizeof(uint32_t)];
+
+    byte[0] = fgetc(f_ptr);
+    if (byte[0] == EOF) {
+        return EOF;
+    }
+
+    if (byte[0] != LOCF_4_BYTE) {
+        *offset += sizeof(uint8_t);
+        return 0;
+    }
+
+    byte[1] = fgetc(f_ptr);
+    if (byte[1] == EOF) {
+        return EOF;
+    }
+
+    if (byte[1] != LOCF_3_BYTE) {
+        *offset += sizeof(uint8_t) * 2;
+        return 0;
+    }
+
+    byte[2] = fgetc(f_ptr);
+    if (byte[2] == EOF) {
+        return EOF;
+    }
+
+    if (byte[2] != LOCF_2_BYTE) {
+        *offset += sizeof(uint8_t) * 3;
+        return 0;
+    }
+
+    byte[3] = fgetc(f_ptr);
+    if (byte[3] == EOF) {
+        return EOF;
+    }
+
+    if (byte[3] != LOCF_1_BYTE) {
+        *offset += sizeof(uint8_t) * 4;
+        return 0;
+    }
+
+    *offset += sizeof(uint32_t);
+    return 1;
+}
+
+static void print_field(const char* f_name, const size_t length) {
+    for (size_t i = 0; i < length; i++) {
+        fputc(f_name[i], stdout);
+    }
+    fputc((int)('\n'), stdout);
+}
+
+
+int find_jpeg_end(FILE* f_ptr, size_t* f_size) {
+    int      jpeg_end  = 0;
+    uint16_t signature = 0;
+
+    do {
+        jpeg_end += readw_16b_msb(f_ptr, &signature);
+        if (signature != JPEG_START_SIGN && jpeg_end == 0) {
+            return 0;
+        }
+        if (jpeg_end < 0) {
+            return 0;
+        }
+    } while (signature != JPEG_END_SIGN);
+
+    *f_size -= jpeg_end;
+    return 1;
+}
+
+int check_for_cdir(FILE* f_ptr, size_t f_size) {
+    int                 offset, result = 0, success = 0;
+    size_t              read_size = 0;
+    local_file_header_t locf_header;
+
+    while (f_size) {
+        offset = 0;
+        result = check_locf_signature(f_ptr, &offset);
+        if (result == EOF) {
+            return success;
+        }
+        if (result) {
+            offset += readw_16b_lsb(f_ptr, &locf_header.version_to_extract);
+            offset +=
+                readw_16b_lsb(f_ptr, &locf_header.general_purpose_bit_flag);
+            offset += readw_16b_lsb(f_ptr, &locf_header.compression_method);
+            offset += readw_16b_lsb(f_ptr, &locf_header.modification_time);
+            offset += readw_16b_lsb(f_ptr, &locf_header.modification_date);
+            offset += readw_32b_lsb(f_ptr, &locf_header.crc32);
+            offset += readw_32b_lsb(f_ptr, &locf_header.compressed_size);
+            offset += readw_32b_lsb(f_ptr, &locf_header.uncompressed_size);
+            offset += readw_16b_lsb(f_ptr, &locf_header.filename_length);
+            offset += readw_16b_lsb(f_ptr, &locf_header.extra_field_length);
+
+            if (locf_header.filename_length < BUFFER_SIZE) {
+                char msg_buf[locf_header.filename_length];
+
+                read_size = fread(msg_buf, sizeof(uint8_t),
+                                  locf_header.filename_length, f_ptr);
+                if (!read_size) {
+                    break;
+                }
+                success = 1;
+                print_field(msg_buf, read_size);
+                offset += read_size;
+            }
+        }
+        f_size -= offset;
+    }
+
+    return success;
 }
