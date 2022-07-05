@@ -18,11 +18,11 @@ static int readw_16b_msb(FILE* f_ptr, uint16_t* halfword) {
 
     for (size_t i = 0; i < sizeof(uint16_t); i++) {
         byte[i] = fgetc(f_ptr);
-        if (byte[i] == EOF) {
-            return EOF;
-        }
     }
-    *halfword = (((uint16_t)byte[0]) << 8) | (uint16_t)(byte[1]);
+    if ((byte[0] == EOF) && (byte[1] == EOF)) {
+        return EOF;
+    }
+    *halfword = (((uint8_t)byte[0]) << 8) | (uint8_t)(byte[1]);
     return sizeof(uint16_t);
 }
 
@@ -35,8 +35,8 @@ static int readw_32b_lsb(FILE* f_ptr, uint32_t* word) {
             return EOF;
         }
     }
-    *word = (((uint32_t)byte[0]) << 24) | (((uint32_t)byte[1]) << 16) |
-            (((uint32_t)byte[2]) << 8) | (uint32_t)byte[3];
+    *word = (((uint8_t)byte[0]) << 24) | (((uint8_t)byte[1]) << 16) |
+            (((uint8_t)byte[2]) << 8) | (uint8_t)byte[3];
     return sizeof(uint32_t);
 }
 
@@ -96,19 +96,33 @@ static void print_field(const char* f_name, const size_t length) {
 
 
 int find_jpeg_end(FILE* f_ptr, size_t* f_size) {
-    int      jpeg_end  = 0;
-    uint16_t signature = 0;
+    int      jpeg_end  = 0, result = 0;
+    int remaining_size = *f_size;
+    uint16_t signature = 0, jpeg_start = 0;
 
     do {
-        jpeg_end += readw_16b_msb(f_ptr, &signature);
+    	result = readw_16b_msb(f_ptr, &signature);
+        if (result < 0) {
+        	remaining_size -= jpeg_end;
+            return EOF;
+        }
+    	jpeg_end += result;
         if (signature != JPEG_START_SIGN && jpeg_end == 0) {
-            return 0;
+            return EOF;
         }
-        if (jpeg_end < 0) {
-            return 0;
+        if(!jpeg_start) {
+        	jpeg_start = signature;
         }
-    } while (signature != JPEG_END_SIGN);
+        if(signature == JPEG_END_SIGN) {
+        	break;
+        }
+    } while (jpeg_end < remaining_size);
 
+    if(jpeg_start != JPEG_START_SIGN && signature != JPEG_END_SIGN) {
+    	return EOF;
+    } else if(jpeg_start && signature != JPEG_END_SIGN) {
+    	return 0;
+    }
     *f_size -= jpeg_end;
     return 1;
 }
