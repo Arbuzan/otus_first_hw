@@ -25,13 +25,10 @@ int main(int argc, char* argv[]) {
     size_t file_size = file_attributes.st_size;
 
     do {
-    	success = find_jpeg_end(file_ptr, &file_size);
-        if (success < 0) {
-            printf("File has no jpg signature.\n");
+        if (!find_jpeg_end(file_ptr, &file_size)) {
+            printf("File has no jpeg signature.\n");
             success = EXIT_FAILURE;
             break;
-        } else if (!success) {
-        	printf("Found jpg signature.\n");
         }
 
         success = check_for_cdir(file_ptr, file_size);
