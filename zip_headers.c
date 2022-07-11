@@ -13,19 +13,6 @@ static int readw_16b_lsb(FILE* f_ptr, uint16_t* halfword) {
     return sizeof(uint16_t);
 }
 
-static int readw_16b_msb(FILE* f_ptr, uint16_t* halfword) {
-    int byte[sizeof(uint16_t)];
-
-    for (size_t i = 0; i < sizeof(uint16_t); i++) {
-        byte[i] = fgetc(f_ptr);
-        if (byte[i] == EOF) {
-            return EOF;
-        }
-    }
-    *halfword = (((uint16_t)byte[0]) << 8) | (uint16_t)(byte[1]);
-    return sizeof(uint16_t);
-}
-
 static int readw_32b_lsb(FILE* f_ptr, uint32_t* word) {
     int byte[sizeof(uint32_t)];
 
@@ -40,54 +27,76 @@ static int readw_32b_lsb(FILE* f_ptr, uint32_t* word) {
     return sizeof(uint32_t);
 }
 
-static int check_locf_signature(FILE* f_ptr, int* offset) {
-    int byte[sizeof(uint32_t)];
+static int check_byte(FILE* f_ptr, uint8_t* byte_out, uint8_t signature,
+                      int* offset) {
+    int byte = fgetc(f_ptr);
+    *offset += 1;
 
-    byte[0] = fgetc(f_ptr);
-    if (byte[0] == EOF) {
+    if (byte == EOF) {
         return EOF;
     }
-
-    if (byte[0] != LOCF_4_BYTE) {
-        *offset += sizeof(uint8_t);
+    *byte_out = (uint8_t)byte;
+    if ((uint8_t)byte != signature) {
         return 0;
     }
-
-    byte[1] = fgetc(f_ptr);
-    if (byte[1] == EOF) {
-        return EOF;
-    }
-
-    if (byte[1] != LOCF_3_BYTE) {
-        *offset += sizeof(uint8_t) * 2;
-        return 0;
-    }
-
-    byte[2] = fgetc(f_ptr);
-    if (byte[2] == EOF) {
-        return EOF;
-    }
-
-    if (byte[2] != LOCF_2_BYTE) {
-        *offset += sizeof(uint8_t) * 3;
-        return 0;
-    }
-
-    byte[3] = fgetc(f_ptr);
-    if (byte[3] == EOF) {
-        return EOF;
-    }
-
-    if (byte[3] != LOCF_1_BYTE) {
-        *offset += sizeof(uint8_t) * 4;
-        return 0;
-    }
-
-    *offset += sizeof(uint32_t);
     return 1;
 }
 
+static int check_locf_signature(FILE* f_ptr, int* offset) {
+    int     result   = -1;
+    uint8_t bytes[4] = {0}, read_byte = 0;
+
+    while (*((uint32_t*)bytes) != LOCF_SIGNATURE) {
+        do {
+            if (read_byte != LOCF_4_BYTE) {
+                result = check_byte(f_ptr, &read_byte, LOCF_4_BYTE, offset);
+                if (result == EOF) {
+                    return EOF;
+                } else if (result) {
+                    bytes[0] = read_byte;
+                }
+            }
+        } while (read_byte != LOCF_4_BYTE);
+
+        result = check_byte(f_ptr, &read_byte, LOCF_3_BYTE, offset);
+        if (result == EOF) {
+            break;
+        }
+        if (read_byte == LOCF_4_BYTE || result == 0) {
+            (void)result;
+            continue;
+        }
+        bytes[1] = read_byte;
+
+
+        result = check_byte(f_ptr, &read_byte, LOCF_2_BYTE, offset);
+        if (result == EOF) {
+            break;
+        }
+        if (result == LOCF_4_BYTE || result == 0) {
+            (void)result;
+            continue;
+        }
+        bytes[2] = read_byte;
+
+        result = check_byte(f_ptr, &read_byte, LOCF_1_BYTE, offset);
+        if (result == EOF) {
+            break;
+        }
+        if (result == LOCF_4_BYTE || result == 0) {
+            (void)result;
+            continue;
+        }
+        bytes[3] = read_byte;
+    }
+
+    return result;
+}
+
+static uint32_t field_count = 0;
+
 static void print_field(const char* f_name, const size_t length) {
+    printf("%u:\t", ++field_count);
     for (size_t i = 0; i < length; i++) {
         fputc(f_name[i], stdout);
     }
@@ -96,18 +105,36 @@ static void print_field(const char* f_name, const size_t length) {
 
 
 int find_jpeg_end(FILE* f_ptr, size_t* f_size) {
-    int      jpeg_end  = 0;
-    uint16_t signature = 0;
+    int     jpeg_end = 0, result = 0;
+    uint8_t byte = 0;
 
     do {
-        jpeg_end += readw_16b_msb(f_ptr, &signature);
-        if (signature != JPEG_START_SIGN && jpeg_end == 0) {
+        result = check_byte(f_ptr, &byte, JPEG_FIRST_START_END_BYTE, &jpeg_end);
+        if (result < 0) {
             return 0;
         }
-        if (jpeg_end < 0) {
+        if (!result) {
+            continue;
+        }
+        result = check_byte(f_ptr, &byte, JPEG_SECOND_START_BYTE, &jpeg_end);
+        if (result < 0) {
             return 0;
         }
-    } while (signature != JPEG_END_SIGN);
+    } while (!result);
+
+    do {
+        result = check_byte(f_ptr, &byte, JPEG_FIRST_START_END_BYTE, &jpeg_end);
+        if (result < 0) {
+            return 0;
+        }
+        if (!result) {
+            continue;
+        }
+        result = check_byte(f_ptr, &byte, JPEG_SECOND_END_BYTE, &jpeg_end);
+        if (result < 0) {
+            return 0;
+        }
+    } while (!result);
 
     *f_size -= jpeg_end;
     return 1;

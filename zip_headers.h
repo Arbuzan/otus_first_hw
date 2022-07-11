@@ -5,9 +5,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define BUFFER_SIZE     1024U
-#define JPEG_START_SIGN 0xFFD8U
-#define JPEG_END_SIGN   0xFFD9U
+#define BUFFER_SIZE               1024U
+#define JPEG_FIRST_START_END_BYTE 0xFFU
+#define JPEG_SECOND_START_BYTE    0xD8U
+#define JPEG_SECOND_END_BYTE      0xD9U
 
 // Обязательная сигнатура, равна 0x04034b50
 #define LOCF_SIGNATURE 0x04034b50U
