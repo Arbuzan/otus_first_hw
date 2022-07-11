@@ -9,7 +9,7 @@ static int readw_16b_lsb(FILE* f_ptr, uint16_t* halfword) {
             return EOF;
         }
     }
-    *halfword = (((uint16_t)byte[1]) << 8) | (uint16_t)(byte[0]);
+    *halfword = (((uint8_t)byte[1]) << 8) | (uint8_t)(byte[0]);
     return sizeof(uint16_t);
 }
 
@@ -22,8 +22,8 @@ static int readw_32b_lsb(FILE* f_ptr, uint32_t* word) {
             return EOF;
         }
     }
-    *word = (((uint32_t)byte[0]) << 24) | (((uint32_t)byte[1]) << 16) |
-            (((uint32_t)byte[2]) << 8) | (uint32_t)byte[3];
+    *word = (((uint8_t)byte[0]) << 24) | (((uint8_t)byte[1]) << 16) |
+            (((uint8_t)byte[2]) << 8) | (uint8_t)byte[3];
     return sizeof(uint32_t);
 }
 
